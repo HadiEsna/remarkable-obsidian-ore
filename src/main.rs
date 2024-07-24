@@ -1,6 +1,7 @@
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::fs::File;
+use std::io;
 use std::io::{BufReader, Read};
 use std::process::Command;
 use tide::{Request, Response, StatusCode};
@@ -24,14 +25,16 @@ struct SyncData {
 async fn main() -> tide::Result<()> {
     let mut app = tide::new();
 
-    app.at("/").get(|_| async { Ok("Hello, world!") });
+    app.at("/").get(|_| async { Ok("Hello, world123!") });
     app.at("/sync").get(sync);
 
-    app.listen("localhost:8080").await?;
+    app.listen("localhost:8081").await?;
     Ok(())
 }
 
 async fn sync(_: Request<()>) -> tide::Result {
+    println!("Running command");
+
     let command = "sh";
     // let command = "ls";
     let args: [&str; 1] = ["src/bash/getUpdates.sh"];
@@ -68,7 +71,7 @@ async fn check_downloaded_files() {
     let mut files = Vec::new();
     for entry in WalkDir::new("./Obsidian") {
         let entry = entry.unwrap();
-        if entry.file_type().is_file() {
+        if entry.file_type().is_file() && entry.path().display().to_string().contains(".zip") {
             files.push(entry.path().display().to_string());
         }
     }
@@ -100,15 +103,22 @@ async fn check_downloaded_files() {
             }
         }
     }
+    println!("{:?}", files_to_add);
     for files_to_add in &files_to_add {
         let command = "sh";
         let file_path = "/Users/working/sources/Hadi/remarkable-obsidian/remarkable-obsidian-ore/"
             .to_string()
             + &files_to_add.name;
 
-        let zip_add = format!("{}", file_path.replace("./", ""));
-        let dest_folder = file_path.replace(".zip", "");
+        let zip_add = file_path.replace("./", "");
+        let dest_folder = zip_add
+            .replace(".zip", "")
+            .replace("/Obsidian/", "/Obsidian_processed/");
         let folder_add = format!("{}:/store", dest_folder);
+
+        println!("zip_add: {}", zip_add);
+        println!("dest_folder: {}", dest_folder);
+        println!("folder_add: {}", folder_add);
         let args: [&str; 4] = [
             "src/bash/openZipAndConvert.sh",
             zip_add.as_str(),
@@ -125,8 +135,40 @@ async fn check_downloaded_files() {
             // Convert the output to a string and print it
             let stdout = String::from_utf8_lossy(&output.stdout);
             println!("Command executed successfully:\n{}", stdout);
+            let files_in_folder = WalkDir::new(format!("{}/out", dest_folder))
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().is_file())
+                .map(|e| e.path().display().to_string())
+                .collect::<Vec<String>>();
+            println!("files in dest {:?}", files_in_folder[0]);
+            let mut file_name = files_in_folder[0].replace(
+                "/Users/working/sources/Hadi/remarkable-obsidian/remarkable-obsidian-ore/Obsidian_processed/",
+                "",
+            );
+            file_name = file_name.split("/").collect::<Vec<&str>>()[0].to_string();
+            let command = "mv";
+            let ar = format!("/Users/working/Library/Mobile Documents/iCloud~md~obsidian/Documents/notes/notes/8. remarkable notes/{}.pdf", file_name);
+            let args: [&str; 2] = [files_in_folder[0].as_str(), ar.as_str()];
+            let output = Command::new(command)
+                .args(&args)
+                .output()
+                .expect("Failed to execute command");
+            if output.status.success() {
+                // Convert the output to a string and print it
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                println!("Command executed successfully:\n{}", stdout);
+            } else {
+                // Handle the error
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                println!("Command failed with error:\n{}", stderr);
+            }
         } else {
             // Handle the error
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            println!("{}", stdout);
+
             let stderr = String::from_utf8_lossy(&output.stderr);
             println!("Command failed with error:\n{}", stderr);
         }
@@ -136,6 +178,4 @@ async fn check_downloaded_files() {
             files_to_remove.push(file_data.name.clone());
         }
     }
-    // println!("remove {:?}", files_to_remove);
-    // println!("add {:?}", files_to_add);
 }
