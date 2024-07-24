@@ -1,0 +1,12 @@
+{
+  "files": [
+    {
+      "name": "file1",
+      "hash": "path/to/file1"
+    },
+    {
+      "name": "file2",
+      "hash": "path/to/file2"
+    }
+  ]
+}
